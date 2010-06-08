@@ -5,11 +5,12 @@ import java.nio.charset.Charset;
 
 import org.apollo.jagcached.net.jaggrab.JagGrabRequestDecoder;
 import org.apollo.jagcached.net.jaggrab.JagGrabResponseEncoder;
+import org.jboss.netty.buffer.ChannelBuffer;
+import org.jboss.netty.buffer.ChannelBuffers;
 import org.jboss.netty.channel.ChannelPipeline;
 import org.jboss.netty.channel.ChannelPipelineFactory;
 import org.jboss.netty.channel.Channels;
 import org.jboss.netty.handler.codec.frame.DelimiterBasedFrameDecoder;
-import org.jboss.netty.handler.codec.frame.Delimiters;
 import org.jboss.netty.handler.codec.string.StringDecoder;
 import org.jboss.netty.handler.timeout.IdleStateHandler;
 import org.jboss.netty.util.Timer;
@@ -29,6 +30,19 @@ public final class JagGrabPipelineFactory implements ChannelPipelineFactory {
 	 * The character set used in the request.
 	 */
 	private static final Charset JAGGRAB_CHARSET = Charset.forName("US-ASCII");
+	
+	/**
+	 * A buffer with two line feed (LF) characters in it.
+	 */
+	private static final ChannelBuffer DOUBLE_LINE_FEED_DELIMITER = ChannelBuffers.buffer(2);
+	
+	/**
+	 * Populates the double line feed buffer.
+	 */
+	static {
+		DOUBLE_LINE_FEED_DELIMITER.writeByte(10);
+		DOUBLE_LINE_FEED_DELIMITER.writeByte(10);
+	}
 	
 	/**
 	 * The file server event handler.
@@ -55,7 +69,7 @@ public final class JagGrabPipelineFactory implements ChannelPipelineFactory {
 		ChannelPipeline pipeline = Channels.pipeline();
 		
 		// decoders
-		pipeline.addLast("framer", new DelimiterBasedFrameDecoder(MAX_REQUEST_LENGTH, Delimiters.lineDelimiter()));
+		pipeline.addLast("framer", new DelimiterBasedFrameDecoder(MAX_REQUEST_LENGTH, DOUBLE_LINE_FEED_DELIMITER));
 		pipeline.addLast("string-decoder", new StringDecoder(JAGGRAB_CHARSET));
 		pipeline.addLast("jaggrab-decoder", new JagGrabRequestDecoder());
 		
