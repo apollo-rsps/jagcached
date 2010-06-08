@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<project name="jagcached" default="build" basedir=".">
+	<property name="SRC_DIR" location="src" />
+	<property name="BIN_DIR" location="bin" />
+	<property name="LIB_DIR" location="lib" />
+	<target name="init">
+		<mkdir dir="${BIN_DIR}" />	
+	</target>
+	<target name="build" depends="init">
+		<javac srcdir="${SRC_DIR}" destdir="${BIN_DIR}">
+			<classpath>
+				<fileset dir="${LIB_DIR}">
+					<include name="*.jar" />
+				</fileset>
+			</classpath>
+		</javac>
+	</target>
+	<target name="clean">
+		<delete dir="${BIN_DIR}" />
+	</target>
+</project>

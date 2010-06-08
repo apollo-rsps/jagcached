@@ -1,0 +1,247 @@
+-------------------------------------------------------------------------------
+Introduction
+-------------------------------------------------------------------------------
+
+jagcached is an open-source daemon designed for serving files to clients in a
+massively multiplayer online game environment.
+
+It can serve files using HTTP and JAGGRAB (a protocol similar to the first
+version of HTTP - now known as HTTP 0.9) as well as a binary streaming
+protocol named ondemand. JAGGRAB and ondemand are both proprietary protocols.
+
+-------------------------------------------------------------------------------
+Using jagcached
+-------------------------------------------------------------------------------
+
+The cache which you wish to be served should be placed in the data/fs
+directory, such that the paths of files look like so:
+
+  /path/to/jagcached/data/fs/main_file_cache...
+
+Starting it is simple: use the start.sh shell script on Linux and the start.bat
+batch script on Windows. You'll need the JRE binaries in your PATH environment
+variable.
+
+Apache Ant can be used to build jagcached from source. You could also import
+the project into an IDE like Eclipse which should detect the project layout
+automatically (jagcached was developed and tested in Eclipse on a Linux
+system).
+
+Optionally, you can place additional files in the data/www folder which can be
+accessed over HTTP - making jagcached act as a rudimentary web server. However,
+the virtual path mappings (see below) cannot be overriden! jagcached will load
+MIME types for a few simple formats (txt, png, gif, jpeg, html, css) and
+otherwise assume the type "application/octect-stream". It will look for a file
+named "index.html" in the directory, and use that as the index page for that
+directory. It will not produce directory listings.
+
+You cannot configure the ports or paths that jagcached uses. You'll need to
+either edit the source and rebuild it, use symbolic links (for the paths) or
+use a different working directory. This is partly due to simplicity and partly
+due to laziness!
+
+This also means on Linux you will need root access so it can bind to the HTTP
+port. If this isn't possible, it'll just listen on 43594 and 43595 but bear in
+mind this isn't as efficient - clients will timeout while they try to access
+HTTP and then use JAGGRAB as a fallback (probably originally intended for
+getting around corporate firewalls).
+
+-------------------------------------------------------------------------------
+Protocol and Format Documentation
+-------------------------------------------------------------------------------
+
+NOTE: only JAGGRAB and the ondemand protocols are covered here. HTTP is not as
+it is a defined standard. All data types, unless otherwise stated, are big
+endian (MSB-LSB).
+
+The JAGGRAB protocol is similar to HTTP 0.9. A connection is opened on TCP port
+43595 for each request. The format of a request is the following text, encoded
+using ASCII (and without the leading/trailing spaces):
+
+  JAGGRAB /<path><LF><LF>
+
+Where <path> is the path of the resource to access, and <LF> is the line feed
+character in ASCII.
+
+The server then responds with the contents of the file and closes the
+connection.
+
+Certain paths in JAGGRAB and HTTP match files in the actual cache itself. This
+is the mapping:
+
+  /crc         => (automatically generated, see below)
+  /title       => type 0, file 1
+  /config      => type 0, file 2
+  /interface   => type 0, file 3
+  /media       => type 0, file 4
+  /versionlist => type 0, file 5
+  /textures    => type 0, file 6
+  /wordenc     => type 0, file 7
+  /sounds      => type 0, file 8
+
+NOTE: you should only check the start of the path for these special resources.
+They can be postfixed with random numbers (in order to prevent caching). The
+CRC table will also be postfixed with the version.
+
+Hence, a typical CRC path might look like this:
+
+  /crc5659473873-317
+
+Requests for other files might look like this:
+
+  /title48957338448
+
+The /crc path points to an automatically generated CRC table. This is 40 bytes
+long. It consists of:
+
+  9x CRC32 hashes    (4 bytes)
+  a hash of the CRCs (4 bytes)
+
+The CRC32 hashes are the hashes of the files with the type 0. File 0 is unused
+and generally ignored by clients, so the hash could be set to anything (e.g.
+zero or the client version).
+
+The final hash is computed using the following algorithm:
+
+  hash = 1234
+  foreach crc hash
+    hash = (hash << 1) + crc hash
+
+This is used to verify the integrity of the table itself.
+
+The ondemand protocol, instead of working with paths, allows you to access any
+file directly using its type id and file id. It runs on port 43594 (along with
+the game) however it has a different service id (15).
+
+Once connected, an ondemand client will send a single byte with the value 15.
+The server with then respond with 8 bytes which are ignored by the client and
+thus usually null (0).
+
+After this initial handshake, all requests are in the form:
+
++---------------+----------------+-------------------+
+| type (1 byte) | file (2 bytes) | priority (1 byte) |
++---------------+----------------+-------------------+
+
+Type typically ranges from 0-3 and is one minus the name of the index file. For
+example, if the client wanted a file in the index file 3, it would send the
+type as 2. The file id has no such transformation.
+
+The priority is 1-3, with 1 being the highest and 3 being the lowest.
+
+HIGH   (1): the client needs the file urgently to continue playing the game.
+MEDIUM (2): the client needs the file to load the game during startup.
+LOW    (3): the client might need the file in the future, but not now.
+
+Responses are 500 byte chunks of the file:
+
++---------------+----------------+---------------------+-------------------+
+| type (1 byte) | file (2 bytes) | file size (2 bytes) | chunk id (1 byte) |
++---------------+----------------+---------------------+-------------------+
+| data (n bytes, where n <= 500) |
++--------------------------------+
+
+The files are stored on the client and (generally) on the server in a 'virtual
+indexed file system' placed on top of the existing file system.
+
+This consists of one data file and several index files. The data file is named
+main_file_cache.dat or main_file_cache.dat2. The index files are named
+main_file_cache.idx postfixed with a number (e.g. main_file_cache.idx3).
+
+An index file is split up into several records which each points to a file. The
+format of each 6 byte record is:
+
++---------------------+-----------------------+
+| file size (3 bytes) | head sector (3 bytes) |
++---------------------+-----------------------+
+
+The nth file is the nth record. So, if you wanted to access file 3's record,
+you would read 6 bytes from (and including) the 12th byte.
+
+The data file is split up into sectors. A file can be dispersed throughout the
+whole file (i.e. it is fragmented) however they tend to be consecutive. The
+client does not currently defragment the file system, but re-downloading it
+from scratch has the same effect.
+
+Each sector is 520 bytes long. The format of a sector is:
+
++------------------+------------------+
+| header (8 bytes) | data (512 bytes) |
++------------------+------------------+
+
+The format of the header is:
+
++----------------+-----------------+-----------------------+---------------+
+| file (2 bytes) | chunk (2 bytes) | next sector (3 bytes) | type (1 byte) |
++----------------+-----------------+-----------------------+---------------+
+
+File and type are the file id and type id (note that if the file is in the
+main_file_cache.idx2 file, the type id will be 3, etc).
+
+Sectors are stored in a linked list: the index points to the head sector, and
+each sector points to the next sector which holds the next chunk of the file.
+
+The first sector in the list will have chunk id 0, the second will have id 1,
+and so on.
+
+The next sector id of the last sector in a file will be 0.
+
+-------------------------------------------------------------------------------
+Licensing
+-------------------------------------------------------------------------------
+
+Copyright (C) 2010 the Apollo Development Team.
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+-------------------------------------------------------------------------------
+Third-Party Libraries
+-------------------------------------------------------------------------------
+
+jagcached uses the Netty library (available at http://jboss.org/netty). Netty
+is released under the Apache License version 2.0, which the Free Software
+Foundation considers to be compatible with the GNU General Public License
+version 3 (the license jagcached is licensed under).
+
+-------------------------------------------------------------------------------
+Git Repository
+-------------------------------------------------------------------------------
+
+The source code is managed using git and is hosted on GitHub. The GitHub
+project page is located at http://github.com/apollo-rsps/jagcached and has
+information on accessing the repository.
+
+-------------------------------------------------------------------------------
+Credits
+-------------------------------------------------------------------------------
+
+jagcached would have not been possible without research, ideas and support from
+several people within the server emulation community.
+
+Members of the Apollo Development team:
+ - Graham
+
+For research (protocol and formats):
+ - wL
+ - daiki
+ - super_
+ - Tom
+ - silabsoft
+
+For general support, ideas and discussion:
+ - blakeman8192
+ - Sir Sean
+ - Raul
+ - thiefmn6092
+ 
