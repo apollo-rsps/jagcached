@@ -22,4 +22,5 @@
 	<target name="clean">
 		<delete dir="${BIN_DIR}" />
 	</target>
+	<target name="rebuild" depends="clean, build" />
 </project>
