@@ -3,10 +3,11 @@ package org.apollo.jagcached.dispatch;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
-
 import org.apollo.jagcached.fs.IndexedFileSystem;
 import org.apollo.jagcached.net.jaggrab.JagGrabRequest;
 import org.apollo.jagcached.net.jaggrab.JagGrabResponse;
+import org.apollo.jagcached.resource.ResourceProvider;
+import org.apollo.jagcached.resource.VirtualResourceProvider;
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.buffer.ChannelBuffers;
 import org.jboss.netty.channel.Channel;
@@ -16,14 +17,14 @@ import org.jboss.netty.channel.ChannelFutureListener;
  * A worker which services JAGGRAB requests.
  * @author Graham
  */
-public final class JagGrabRequestWorker extends RequestWorker<JagGrabRequest> {
+public final class JagGrabRequestWorker extends RequestWorker<JagGrabRequest, ResourceProvider> {
 
 	/**
 	 * Creates the JAGGRAB request worker.
 	 * @param fs The file system.
 	 */
 	public JagGrabRequestWorker(IndexedFileSystem fs) {
-		super(fs);
+		super(new VirtualResourceProvider(fs));
 	}
 
 	@Override
@@ -32,9 +33,8 @@ public final class JagGrabRequestWorker extends RequestWorker<JagGrabRequest> {
 	}
 
 	@Override
-	protected void service(IndexedFileSystem fs, Channel channel, JagGrabRequest request) throws IOException {
-		String path = request.getFilePath();
-		ByteBuffer buf = VirtualResourceMapper.getVirtualResource(fs, path);
+	protected void service(ResourceProvider provider, Channel channel, JagGrabRequest request) throws IOException {
+		ByteBuffer buf = provider.get(request.getFilePath());
 		if (buf == null) {
 			channel.close();
 		} else {

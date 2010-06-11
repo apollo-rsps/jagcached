@@ -2,21 +2,20 @@ package org.apollo.jagcached.dispatch;
 
 import java.io.IOException;
 
-
-import org.apollo.jagcached.fs.IndexedFileSystem;
 import org.jboss.netty.channel.Channel;
 
 /**
  * The base class for request workers.
  * @author Graham
  * @param <T> The type of request.
+ * @param <P> The type of provider.
  */
-public abstract class RequestWorker<T> implements Runnable {
+public abstract class RequestWorker<T, P> implements Runnable {
 	
 	/**
-	 * The file system.
+	 * The resource provider.
 	 */
-	private final IndexedFileSystem fs;
+	private final P provider;
 	
 	/**
 	 * An object used for locking checks to see if the worker is running.
@@ -30,10 +29,10 @@ public abstract class RequestWorker<T> implements Runnable {
 	
 	/**
 	 * Creates the request worker with the specified file system.
-	 * @param fs The file system.
+	 * @param provider The resource provider.
 	 */
-	public RequestWorker(IndexedFileSystem fs) {
-		this.fs = fs;
+	public RequestWorker(P provider) {
+		this.provider = provider;
 	}
 
 	/**
@@ -47,35 +46,27 @@ public abstract class RequestWorker<T> implements Runnable {
 		
 	@Override
 	public final void run() {
-		try {
-			while (true) {
-				synchronized (lock) {
-					if (!running) {
-						break;
-					}
-				}
-				
-				ChannelRequest<T> request;
-				try {
-					request = nextRequest();
-				} catch (InterruptedException e) {
-					continue;
-				}
-				
-				Channel channel = request.getChannel();
-				
-				try {
-					service(fs, channel, request.getRequest());
-				} catch (IOException e) {
-					e.printStackTrace();
-					channel.close();
+		while (true) {
+			synchronized (lock) {
+				if (!running) {
+					break;
 				}
 			}
-		} finally {
+			
+			ChannelRequest<T> request;
 			try {
-				fs.close();
-			} catch (IOException ex) {
-				/* ignore */
+				request = nextRequest();
+			} catch (InterruptedException e) {
+				continue;
+			}
+			
+			Channel channel = request.getChannel();
+			
+			try {
+				service(provider, channel, request.getRequest());
+			} catch (IOException e) {
+				e.printStackTrace();
+				channel.close();
 			}
 		}
 	}
@@ -89,11 +80,11 @@ public abstract class RequestWorker<T> implements Runnable {
 	
 	/**
 	 * Services a request.
-	 * @param fs The file system.
+	 * @param provider The resource provider.
 	 * @param channel The channel.
 	 * @param request The request to service.
 	 * @throws IOException if an I/O error occurs.
 	 */
-	protected abstract void service(IndexedFileSystem fs, Channel channel, T request) throws IOException;
+	protected abstract void service(P provider, Channel channel, T request) throws IOException;
 
 }

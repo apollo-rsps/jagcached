@@ -16,7 +16,7 @@ import org.jboss.netty.channel.Channel;
  * A worker which services 'on-demand' requests.
  * @author Graham
  */
-public final class OnDemandRequestWorker extends RequestWorker<OnDemandRequest> {
+public final class OnDemandRequestWorker extends RequestWorker<OnDemandRequest, IndexedFileSystem> {
 	
 	/**
 	 * The maximum length of a chunk, in bytes.

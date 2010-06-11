@@ -17,6 +17,11 @@ import org.jboss.netty.handler.codec.http.HttpRequest;
 public final class RequestDispatcher {
 	
 	/**
+	 * The maximum size of a queue before requests are rejected.
+	 */
+	private static final int MAXIMUM_QUEUE_SIZE = 1024;
+	
+	/**
 	 * A queue for pending 'on-demand' requests.
 	 */
 	private static final BlockingQueue<ChannelRequest<OnDemandRequest>> onDemandQueue = new PriorityBlockingQueue<ChannelRequest<OnDemandRequest>>();
@@ -67,6 +72,9 @@ public final class RequestDispatcher {
 	 * @param request The request.
 	 */
 	public static void dispatch(Channel channel, OnDemandRequest request) {
+		if (onDemandQueue.size() >= MAXIMUM_QUEUE_SIZE) {
+			channel.close();
+		}
 		onDemandQueue.add(new ChannelRequest<OnDemandRequest>(channel, request));
 	}
 
@@ -76,6 +84,9 @@ public final class RequestDispatcher {
 	 * @param request The request.
 	 */
 	public static void dispatch(Channel channel, JagGrabRequest request) {
+		if (jagGrabQueue.size() >= MAXIMUM_QUEUE_SIZE) {
+			channel.close();
+		}
 		jagGrabQueue.add(new ChannelRequest<JagGrabRequest>(channel, request));
 	}
 
@@ -85,6 +96,9 @@ public final class RequestDispatcher {
 	 * @param request The request.
 	 */
 	public static void dispatch(Channel channel, HttpRequest request) {
+		if (httpQueue.size() >= MAXIMUM_QUEUE_SIZE) {
+			channel.close();
+		}
 		httpQueue.add(new ChannelRequest<HttpRequest>(channel, request));
 	}
 	

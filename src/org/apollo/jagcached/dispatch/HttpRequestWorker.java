@@ -2,15 +2,15 @@ package org.apollo.jagcached.dispatch;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.RandomAccessFile;
-import java.net.URI;
 import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel.MapMode;
 import java.nio.charset.Charset;
 import java.util.Date;
 
-
 import org.apollo.jagcached.fs.IndexedFileSystem;
+import org.apollo.jagcached.resource.CombinedResourceProvider;
+import org.apollo.jagcached.resource.HypertextResourceProvider;
+import org.apollo.jagcached.resource.ResourceProvider;
+import org.apollo.jagcached.resource.VirtualResourceProvider;
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.buffer.ChannelBuffers;
 import org.jboss.netty.channel.Channel;
@@ -24,7 +24,7 @@ import org.jboss.netty.handler.codec.http.HttpResponseStatus;
  * A worker which services HTTP requests.
  * @author Graham
  */
-public final class HttpRequestWorker extends RequestWorker<HttpRequest> {
+public final class HttpRequestWorker extends RequestWorker<HttpRequest, ResourceProvider> {
 
 	/**
 	 * The value of the server header.
@@ -46,7 +46,7 @@ public final class HttpRequestWorker extends RequestWorker<HttpRequest> {
 	 * @param fs The file system.
 	 */
 	public HttpRequestWorker(IndexedFileSystem fs) {
-		super(fs);
+		super(new CombinedResourceProvider(new VirtualResourceProvider(fs), new HypertextResourceProvider(WWW_DIRECTORY)));
 	}
 
 	@Override
@@ -55,46 +55,19 @@ public final class HttpRequestWorker extends RequestWorker<HttpRequest> {
 	}
 
 	@Override
-	protected void service(IndexedFileSystem fs, Channel channel, HttpRequest request) throws IOException {
+	protected void service(ResourceProvider provider, Channel channel, HttpRequest request) throws IOException {
 		String path = request.getUri();
-		ByteBuffer buf = VirtualResourceMapper.getVirtualResource(fs, path);
+		ByteBuffer buf = provider.get(path);
 		
 		ChannelBuffer wrappedBuf;
 		HttpResponseStatus status = HttpResponseStatus.OK;
 		
-		String mimeType = "application/octet-stream";
+		String mimeType = getMimeType(request.getUri());
 		
 		if (buf == null) {
-			File f = new File(WWW_DIRECTORY, path);
-			URI target = f.toURI().normalize();
-			URI base = WWW_DIRECTORY.toURI().normalize();
-			if (target.toASCIIString().startsWith(base.toASCIIString())) {
-				if (f.exists()) {
-					if (f.isDirectory()) {
-						File tmp = new File(f, "index.html");
-						if (tmp.exists()) {
-							f = tmp;
-						}
-					}
-					if (f.isDirectory()) {
-						status = HttpResponseStatus.FORBIDDEN;
-						wrappedBuf = createErrorPage(status, "Directory listings cannot be viewed.");
-						mimeType = "text/html";
-					} else {
-						status = HttpResponseStatus.OK;
-						wrappedBuf = readFile(f);
-						mimeType = getMimeType(f.getName());
-					}
-				} else {
-					status = HttpResponseStatus.NOT_FOUND;
-					wrappedBuf = createErrorPage(status, "The page you requested could not be found.");
-					mimeType = "text/html";
-				}
-			} else {
-				status = HttpResponseStatus.FORBIDDEN;
-				wrappedBuf = createErrorPage(status, "You are not authorized to access that page.");
-				mimeType = "text/html";
-			}
+			status = HttpResponseStatus.NOT_FOUND;
+			wrappedBuf = createErrorPage(status, "The page you requested could not be found.");
+			mimeType = "text/html";
 		} else {
 			wrappedBuf = ChannelBuffers.wrappedBuffer(buf);
 		}
@@ -113,23 +86,6 @@ public final class HttpRequestWorker extends RequestWorker<HttpRequest> {
 		resp.setContent(wrappedBuf);
 		
 		channel.write(resp).addListener(ChannelFutureListener.CLOSE);
-	}
-
-	/**
-	 * Reads a file.
-	 * @param f The file.
-	 * @return The channel buffer.
-	 * @throws IOException if an I/O error occurs.
-	 */
-	private ChannelBuffer readFile(File f) throws IOException {
-		RandomAccessFile raf = new RandomAccessFile(f, "r");
-		ByteBuffer buf;
-		try {
-			buf = raf.getChannel().map(MapMode.READ_ONLY, 0, raf.length());
-		} finally {
-			raf.close();
-		}
-		return ChannelBuffers.wrappedBuffer(buf);
 	}
 
 	/**

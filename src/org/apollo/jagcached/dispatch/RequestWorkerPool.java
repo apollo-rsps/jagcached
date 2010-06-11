@@ -33,7 +33,7 @@ public final class RequestWorkerPool {
 	/**
 	 * A list of request workers.
 	 */
-	private final List<RequestWorker<?>> workers = new ArrayList<RequestWorker<?>>();
+	private final List<RequestWorker<?, ?>> workers = new ArrayList<RequestWorker<?, ?>>();
 	
 	/**
 	 * The request worker pool.
@@ -55,7 +55,7 @@ public final class RequestWorkerPool {
 			workers.add(new HttpRequestWorker(new IndexedFileSystem(base, true)));
 		}
 		
-		for (RequestWorker<?> worker : workers) {
+		for (RequestWorker<?, ?> worker : workers) {
 			service.submit(worker);
 		}
 	}
@@ -64,7 +64,7 @@ public final class RequestWorkerPool {
 	 * Stops the threads in the pool.
 	 */
 	public void stop() {
-		for (RequestWorker<?> worker : workers) {
+		for (RequestWorker<?, ?> worker : workers) {
 			worker.stop();
 		}
 		
