@@ -17,7 +17,7 @@ public final class VirtualResourceProvider extends ResourceProvider {
 	 */
 	private static final String[] VALID_PREFIXES = {
 		"crc", "title", "config", "interface", "media", "versionlist",
-		"textures", "wordence", "sounds"
+		"textures", "wordenc", "sounds"
 	};
 	
 	/**
